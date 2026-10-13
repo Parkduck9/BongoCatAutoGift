@@ -7,7 +7,7 @@ Never read, copy, print, or embed authentication tokens in project files.
 When the user asks you to consult Codex, invoke this project's launcher through your shell tool:
 
 ```powershell
-powershell.exe -NoProfile -File 'D:\BongoAutoCat\ask-codex.ps1' -Prompt 'Your question and relevant context'
+powershell.exe -NoProfile -File 'D:\BongoCatAutoGift\ask-codex.ps1' -Prompt 'Your question and relevant context'
 ```
 
 The launcher uses the installed executable directly, so Claude does not need Codex on PATH.

@@ -13,7 +13,7 @@ import cats as cats_mod
 import detect
 
 STEPS = [  # key, required, Korean instruction
-    ("zone", True, "1/6 감지 영역: 고양이가 나타날 수 있는 범위 전체 (가장 높은 말풍선 ~ 작업표시줄 위)"),
+    ("zone", True, "1/6 감지 영역: 고양이가 나타날 수 있는 범위 전체 + 고양이 좌우 약 100px, 위아래 약 50px 여유"),
     ("left", True, "2/6 한 고양이의 왼쪽 1000 선물 아이콘 (그림만, 딱 맞게)"),
     ("right", True, "3/6 같은 고양이의 오른쪽 1000 선물 아이콘"),
     ("tag", True, "4/6 같은 고양이의 이름표 (흰 박스 전체)"),

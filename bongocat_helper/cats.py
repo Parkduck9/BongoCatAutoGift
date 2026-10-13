@@ -141,10 +141,13 @@ class CatRegistry:
             found.add(cat.id)
 
         def inside_scan(cat):
+            """Whole tag inside a scanned rect: only then does 'not found' mean 'gone'
+            (a tag cut by the rect edge is dropped by find_tag_boxes)."""
             if scanned is None:
                 return True
-            cx, cy = cat.box.c
-            return any(x <= cx < x + w and y <= cy < y + h for x, y, w, h in scanned)
+            b = cat.box
+            return any(x <= b.x and y <= b.y and b.x + b.w <= x + w and b.y + b.h <= y + h
+                       for x, y, w, h in scanned)
 
         for cat in self._cats:
             if cat.id in found:

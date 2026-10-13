@@ -102,7 +102,7 @@ def test_stop_request_blocks_click(tmp_path):
 # 8: success needs the same cat still in place
 def test_click_unverified_when_cat_left(tmp_path):
     img, _ = frame()
-    empty = scene.background()
+    empty = scene.background(900, 470)
     # tick1 read, tick2 confirm + fresh recheck + click, tick3 the cat is gone
     eng, clock, clicker, db, _ = make(tmp_path, [img, img, img, empty], targets=("리네",), dry_run=False)
     events = run(eng, clock, 5)

@@ -30,10 +30,14 @@ def _send(flags):
         raise OSError("SendInput failed (game running as admin? then run this as admin too)")
 
 
+class ClickAborted(Exception):
+    """The click was not sent (cursor moved by the user, or stop requested). Not an error."""
+
+
 class Clicker:
     """click(x, y) at absolute screen coords, then put the cursor back where it was."""
 
-    def click(self, x, y):
+    def click(self, x, y, abort=lambda: False):
         user32 = ctypes.windll.user32
         old, now = wintypes.POINT(), wintypes.POINT()
         if not user32.GetCursorPos(ctypes.byref(old)):
@@ -43,6 +47,10 @@ class Clicker:
                 or (now.x, now.y) != (int(x), int(y)):
             raise OSError(f"cursor could not be moved to ({x}, {y}); click not sent")
         time.sleep(0.02)
+        # last check before the button goes down: the user may have moved the mouse meanwhile
+        if not user32.GetCursorPos(ctypes.byref(now)) or (now.x, now.y) != (int(x), int(y)) or abort():
+            user32.SetCursorPos(old.x, old.y)
+            raise ClickAborted(f"cursor left ({x}, {y}) or stop requested before the click")
         _send(MOUSEEVENTF_LEFTDOWN)
         time.sleep(random.uniform(0.03, 0.06))
         _send(MOUSEEVENTF_LEFTUP)

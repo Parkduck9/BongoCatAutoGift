@@ -287,6 +287,25 @@ bongocat_helper/
 - 테스트로 드러난 추가 수정: 클릭 1번/tick 이후 같은 고양이 다른 쪽 아이콘이 최대 5초 늦어짐 → 클릭 후 다음 tick 전체 재검색
 - 결과: 테스트 120개 통과(2회), exe 재빌드·깨끗한 폴더 셀프 테스트·제어 패널 실행 확인
 
+## 11. Codex 코드 리뷰 2차 (2026-10-13)
+- 원문: `docs/md/codex_review_2.md`. 1차 14건 판정: verified 7 (2, 6, 9, 10, 12, 13, 14) / incomplete 7 (1, 3, 4, 5, 7, 8, 11) / wrong 0. 새 지적 B1~B8 — 전부 코드 대조로 유효 확인, `tests/test_review2.py` (수정 전 10/10 실패) 후 수정
+- 첫 실행 실패 원인: 새 저장소에 `logs/`가 없어 stderr 리다이렉트가 실패(리뷰 미실행). 폴더 생성 후 재실행
+- CLAUDE.md의 Codex 런처 경로가 옛 폴더(`D:\BongoAutoCat\ask-codex.ps1`, `-C $PSScriptRoot` = 옛 폴더를 리뷰)였음 → `D:\BongoCatAutoGift\ask-codex.ps1`로 수정
+
+| # | 지적 | 수정 |
+|---|---|---|
+| B1 | 재판독이 옛 프레임 기준, 새 캡처는 아이콘만 확인 | `Engine._click`: 새 캡처에서 아이콘 다시 찾기 → **그 프레임으로 이름 재판독** → 그 프레임에서 찾은 중심을 클릭 |
+| B2 | 영역 밖으로 잘린 이름표 고양이의 아이콘 귀속 (1차 3번 미해결) | `engine.owner_may_be_cut_off`: 아이콘의 가능한 주인 이름표(아이콘-오프셋 ± max_dist, 긴 이름 이름표 크기 x1.5)가 영역 안에 다 안 들어가면 `edge_unsafe`로 거부. 실제 이름표(105x24) 기준 고양이 좌우 ~100px, 위아래 ~45px 여유 필요 → setup 안내 문구, test-ocr 표시, GUI 빨간 로그 |
+| B3 | tick 중 대상 삭제해도 클릭 | 클릭 직전 `self.targets`(실시간) 재확인 |
+| B4 | 정지 검사가 클릭보다 이름 / CLI는 F12를 떼면 재개 | 정지 검사를 재판독 뒤·클릭 직전으로 이동 + `Clicker.click(abort=)`로 DOWN 직전에도 검사. CLI `stop_latch` (한 번 누르면 계속 정지) |
+| B5 | 성공 판정·채팅 화자가 캐시 이름 사용 | 성공 판정 전 이름 재판독(다르면 `clicked_unverified`), 채팅 기록 전 화자 재판독(다르면 보류) |
+| B6 | join 시간 초과 후에도 DB 닫음 | 작업 스레드가 아직 살아 있으면 DB를 닫지 않음(프로세스 종료에 맡김) |
+| B7 | 스캔 영역 경계에 걸린 이름표가 missing으로 오판 | 이름표 **전체**가 스캔 영역 안일 때만 "없음" 판정 |
+| B8 | 커서 확인 후 20ms 사이 사용자가 마우스 이동 | DOWN 직전 커서 위치 재확인, 다르면 `ClickAborted`(클릭 안 함, 엔진은 `click_aborted` 기록 후 계속) |
+
+- 테스트 변경: 엔진 가상 화면 높이 420→470 (B2 규칙상 맨 아래 고양이에 여유 필요). B5 채팅 테스트가 settle 시간을 안 기다려 아무것도 검사하지 않던 것 수정
+- 결과: 테스트 132개 통과(2회)
+
 ## 배포: exe [사용자 요구 2026-10-12]
 - `bongocat_helper/BongoHelper.spec` → `.venv\Scripts\pyinstaller BongoHelper.spec --noconfirm` → `dist/BongoHelper.exe` (단일 파일, 콘솔, 약 126MB). 사용자용 사본: `D:\BongoAutoCat\release\BongoHelper.exe`
 - OCR 모델은 exe 안에 포함(`sys._MEIPASS/models`), 다운로드 불필요. `config.json`/`templates/`/`logs/`는 **exe 옆**에 생성 (`config.BASE_DIR`가 frozen이면 exe 폴더, `RESOURCE_DIR`=번들)

@@ -7,6 +7,7 @@ import numpy as np
 
 import cats as cats_mod
 import detect
+import engine
 import ocr
 
 GREEN, RED, GRAY, ORANGE, BLUE = (0, 200, 0), (0, 0, 230), (150, 150, 150), (0, 165, 255), (230, 120, 0)
@@ -19,6 +20,7 @@ class HitInfo:
     name: str | None
     side: str | None
     dist: float | None
+    edge: bool = False   # too close to the zone edge: the engine will not act on it
 
 
 @dataclass
@@ -37,7 +39,7 @@ class Analysis:
 
 
 def analyze(zone, tag_h, templates, offsets, threshold, max_dist, ambiguity_px,
-            targets=(), read=cats_mod.read_tag):
+            targets=(), read=cats_mod.read_tag, tag=None):
     t = {}
     t0 = time.perf_counter()
     boxes = detect.find_tag_boxes(zone, tag_h)
@@ -65,7 +67,10 @@ def analyze(zone, tag_h, templates, offsets, threshold, max_dist, ambiguity_px,
     for h in raw:
         o = reg.owner_of(h.c, side_offsets, max_dist, ambiguity_px)
         named = o and o.cat.is_named
-        hits.append(HitInfo(h, o.cat.name if named else None, o.side if named else None, o.dist if named else None))
+        edge = bool(tag) and engine.owner_may_be_cut_off(h.c, side_offsets, tag, max_dist,
+                                                         zone.shape[1], zone.shape[0])
+        hits.append(HitInfo(h, o.cat.name if named else None, o.side if named else None,
+                            o.dist if named else None, edge))
     named = reg.cats()
     a = Analysis(named, reg.ignored(), hits, t, pending=reg.pending(), bubbles=bubbles)
     a.image = draw(zone, a, side_offsets, set(ocr.normalize(x) for x in targets))

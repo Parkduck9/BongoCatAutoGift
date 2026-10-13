@@ -72,6 +72,8 @@ class BubbleReader:
             owner = registry.owner_of(b.box.c, {"bubble": bubble_offset}, max_dist, 10) if bubble_offset else None
             if owner and not owner.cat.is_named:
                 continue  # speaker's name still being read; read the bubble once it is known
+            if owner and not registry.reverify(owner.cat, zone, now):
+                continue  # the tag does not read that name right now: do not pin it on them
             b.tries += 1
             x, y, w, h = b.box.x + 3, b.box.y + 3, b.box.w - 6, b.box.h - 6
             lines = [l for l in self.read(zone[y:y + h, x:x + w]) if l.score >= self.min_score]

@@ -6,11 +6,12 @@ import store
 from test_cats import FakeOcr
 
 CATS = [(150, 390, "리네"), (450, 220, "철수"), (750, 320, "민지")]
+ZONE_H = 470   # leaves room below the lowest cat: icons whose owner could be cut off are refused
 MON = {"left": 100, "top": 50}
 
 
 def frame(gifts=("리네", "철수", "민지")):
-    return scene.scene([(x, y, n, n in gifts) for x, y, n in CATS])
+    return scene.scene([(x, y, n, n in gifts) for x, y, n in CATS], h=ZONE_H)
 
 
 class Frames:
@@ -25,7 +26,7 @@ class FakeClicker:
     def __init__(self):
         self.clicks = []
 
-    def click(self, x, y):
+    def click(self, x, y, abort=lambda: False):
         self.clicks.append((x, y))
 
 
@@ -39,7 +40,7 @@ class Clock:
 
 def make(tmp_path, frames, targets=("리네", "민지"), dry_run=True):
     img, truth = frame()
-    rects = {"zone": [0, 0, 900, 420],
+    rects = {"zone": [0, 0, 900, ZONE_H],
              "left": [truth[0]["icons"]["left"][0] - 20, truth[0]["icons"]["left"][1] - 20, 40, 40],
              "right": [truth[0]["icons"]["right"][0] - 20, truth[0]["icons"]["right"][1] - 20, 40, 40],
              "tag": [truth[0]["tag"][0] - 3, truth[0]["tag"][1] - 3, truth[0]["tag"][2] + 6, truth[0]["tag"][3] + 6]}
@@ -161,7 +162,7 @@ def test_late_warning_when_icon_does_not_come_back(tmp_path):
 def test_chat_recorded_once_with_speaker(tmp_path):
     # 리네 moved right so the bubble (left of the cat) is fully on screen
     layout = [(260, 390, "리네", True, "야옹 야옹"), (450, 220, "철수"), (750, 320, "민지")]
-    chatty, truth = scene.scene(layout)
+    chatty, truth = scene.scene(layout, h=ZONE_H)
     eng, clock, clicker, db, _ = make(tmp_path, [chatty])
     eng.registry.read = FakeOcr(truth)
     eng.cfg["offsets"]["bubble"] = list(scene.OFF_BUBBLE)

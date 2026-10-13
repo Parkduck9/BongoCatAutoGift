@@ -186,7 +186,7 @@ def cmd_test_ocr(args, cfg):
         zone = grab()
     print("감지 중... (처음엔 OCR 모델 로딩으로 몇 초 걸립니다)")
     a = debug.analyze(zone, cfg["tag"]["height"], templates, cfg["offsets"], cfg["match_threshold"],
-                      cfg["max_dist"], cfg["ambiguity_px"], cfg["targets"])
+                      cfg["max_dist"], cfg["ambiguity_px"], cfg["targets"], tag=cfg["tag"])
     targets = {debug.ocr.normalize(t) for t in cfg["targets"]}
     print(f"고양이(이름표) {len(a.cats)}마리:")
     for c in a.cats:
@@ -200,6 +200,8 @@ def cmd_test_ocr(args, cfg):
     for h in a.hits:
         side = {"left": "왼쪽", "right": "오른쪽"}.get(h.side, "?")
         who = f"{h.name} {side} (거리 {h.dist:.0f}px)" if h.name else "주인 불명 -> 보내지 않음"
+        if h.edge:
+            who += "  [감지 영역 가장자리에 너무 가까움 -> 보내지 않음: 감지 영역을 넓혀 주세요]"
         print(f"  점수 {h.hit.score:.2f}  위치 {h.hit.c}  -> {who}")
     t = a.timings
     if a.bubbles:
@@ -222,6 +224,18 @@ def cmd_test_ocr(args, cfg):
         print(f"  1회 평균 {stats['avg_ms']:.1f}ms / 최대 {stats['max_ms']:.1f}ms · CPU {stats['cpu_pct']:.1f}%")
         print(f"  인식된 고양이: {', '.join(stats['cats']) or '-'}")
     return 0
+
+
+def stop_latch(pressed):
+    """Stop check that stays True once F12 was seen, even after the key is released."""
+    seen = []
+
+    def stop():
+        if not seen and pressed():
+            seen.append(True)
+        return bool(seen)
+
+    return stop
 
 
 def _fmt_left(sec):
@@ -277,8 +291,9 @@ def cmd_run(args, cfg):
     cap = capture.Capturer()
     mon = cap.monitor(cfg["monitor"])
     db = store_mod.Store(config.BASE_DIR / "data" / "bongo.db")
+    stop = stop_latch(clicker.stop_pressed)
     eng = engine.Engine(cfg, lambda: cap.grab(cfg["monitor"], cfg["region"]), clicker.Clicker(), db,
-                        templates, monitor=mon, should_stop=clicker.stop_pressed)
+                        templates, monitor=mon, should_stop=stop)
     eng.restore_timers()
     print("OCR 모델 로딩 중...")
     debug.ocr.ensure_ready()
@@ -287,7 +302,7 @@ def cmd_run(args, cfg):
     print(f"시작: {mode} · 대상 {', '.join(cfg['targets'])} · 멈추려면 F12 (또는 Ctrl+C)")
     last_status = 0.0
     try:
-        while not clicker.stop_pressed():  # checked every cycle, even when a tick ran long
+        while not stop():  # checked every cycle, even when a tick ran long
             t0 = time.time()
             for e in eng.tick():
                 line = engine.format_event(e)
@@ -301,7 +316,7 @@ def cmd_run(args, cfg):
                 if rows:
                     print("  다음 선물: " + " · ".join(
                         f"{n} {engine.SIDE_LABEL[s]} {_fmt_left(r)}" for n, s, r in rows))
-            while time.time() - t0 < cfg["interval_sec"] and not clicker.stop_pressed():
+            while time.time() - t0 < cfg["interval_sec"] and not stop():
                 time.sleep(0.05)
         print("멈췄습니다 (F12).")
     except KeyboardInterrupt:

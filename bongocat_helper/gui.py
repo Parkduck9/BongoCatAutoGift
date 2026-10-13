@@ -22,7 +22,8 @@ import store as store_mod
 
 SIDE_KO = {"left": "왼쪽", "right": "오른쪽"}
 RESULT_TAG = {"dry_run": "ok", "clicked_ok": "ok", "skipped": "bad", "unmatched": "muted",
-              "cooldown": "muted", "clicked_no_change": "bad", "late": "bad", "chat": "chat"}
+              "cooldown": "muted", "clicked_no_change": "bad", "late": "bad", "chat": "chat",
+              "clicked_unverified": "bad", "click_aborted": "bad", "edge_unsafe": "bad"}
 
 
 def cli_command(*args):
@@ -373,7 +374,8 @@ class App:
     def close(self):
         self.runner.stop()
         self.runner.join()  # a running tick may still write to the DB or click
-        self.db.close()
+        if not self.runner.running:  # still busy after the wait: leave the DB to process exit
+            self.db.close()
         self.root.destroy()
 
 

@@ -9,6 +9,7 @@ from dataclasses import dataclass
 import capture
 import cats as cats_mod
 import chatlog
+import clicker as clicker_mod
 import detect
 import gift_timer
 import ocr
@@ -25,6 +26,19 @@ class Event:
     score: float = 0.0
     pos: tuple | None = None
     text: str = ""
+
+
+def owner_may_be_cut_off(point, offsets, tag, max_dist, W, H):
+    """A neighbor whose tag sticks out of the zone is invisible to ownership and could not
+    compete for this icon. True when the icon's possible owner tag (icon - side offset,
+    +- max_dist, plus a long name's tag size) does not fit inside the zone."""
+    th, aspect = tag["height"], tag["aspect"] or 4
+    half_w, half_h = th * aspect * 1.5 / 2 + max_dist, th / 2 + max_dist
+    for off in offsets.values():
+        cx, cy = point[0] - off[0], point[1] - off[1]
+        if cx - half_w < 0 or cy - half_h < 0 or cx + half_w > W or cy + half_h > H:
+            return True
+    return False
 
 
 def format_event(e):
@@ -103,6 +117,32 @@ class Engine:
         found = detect.find_templates(zone[y:y + h, x:x + w], self.templates, self.cfg["match_threshold"])
         return bool(found)
 
+    def _click(self, events, owner, key, hit, zone, now):
+        """Decide on a fresh capture and click there. True if a click was sent."""
+        fresh = self.grab()  # this tick's frame may be stale after OCR work
+        if fresh.shape != zone.shape:
+            return False
+        x, y, w, h = detect.pad_rect((hit.x, hit.y, hit.w, hit.h), 8, (fresh.shape[1], fresh.shape[0]))
+        found = detect.find_templates(fresh[y:y + h, x:x + w], self.templates, self.cfg["match_threshold"],
+                                      offset=(x, y))
+        if not found:
+            return False
+        target = min(found, key=lambda f: abs(f.c[0] - hit.c[0]) + abs(f.c[1] - hit.c[1]))
+        # identity on the same frame that is clicked, target list read live, stop checked last
+        if not self.registry.reverify(owner.cat, fresh, now) or owner.cat.name not in self.targets \
+                or self.should_stop():
+            return False
+        sx, sy = capture.to_screen(self.monitor, target.c[0], target.c[1], self.cfg["region"])
+        try:
+            self.clicker.click(sx, sy, abort=self.should_stop)
+        except clicker_mod.ClickAborted:
+            self._report(events, "click_aborted", key, target, now, force=True)
+            return False
+        self._recent_clicks.append((target.c, now))
+        self._verify.append((key, target, now + self.VERIFY_DELAY, owner.cat.id, owner.cat.box.c))
+        self._last_full = -1e9  # other icons were left for the next tick: search them then
+        return True
+
     # ------------------------------------------------------------------ one step
     def tick(self):
         now = self.clock()
@@ -137,8 +177,8 @@ class Engine:
             cat = self.registry.get(cat_id)
             in_place = cat is not None and cat.is_named and cat.name == key[0] \
                 and abs(cat.box.c[0] - tag_c[0]) <= 8 and abs(cat.box.c[1] - tag_c[1]) <= 8
-            if not in_place:
-                result = "clicked_unverified"   # cat moved/left/hidden: cannot tell, no timer
+            if not in_place or not self.registry.reverify(cat, zone, now):
+                result = "clicked_unverified"   # cat moved/left/hidden/replaced: no timer
             elif self._icon_still_there(zone, hit):
                 result = "clicked_no_change"
             else:
@@ -176,23 +216,17 @@ class Engine:
                 self._report(events, "cooldown", key, hit, now)
             elif any(k == key for k, *_ in self._verify) or self._click_cooling(hit.c, now):
                 continue
-            elif not self.registry.reverify(owner.cat, zone, now):
-                continue  # not a confident read of the same name right now (or someone else)
+            elif owner_may_be_cut_off(hit.c, self.offsets, self.cfg["tag"], self.cfg["max_dist"], W, H):
+                self._report(events, "edge_unsafe", key, hit, now)  # widen the detection zone
             elif self.cfg["dry_run"]:
+                if not self.registry.reverify(owner.cat, zone, now):
+                    continue  # not a confident read of the same name right now (or someone else)
                 self._start_timer(key, now)
                 self.store.add_gift(now, key[0], key[1], "dry_run")
                 self._report(events, "dry_run", key, hit, now, force=True)
-            else:
-                if self.should_stop():
-                    break
-                fresh = self.grab()  # this tick's frame may be stale after OCR work
-                if fresh.shape != zone.shape or not self._icon_still_there(fresh, hit):
-                    continue
-                sx, sy = capture.to_screen(self.monitor, hit.c[0], hit.c[1], self.cfg["region"])
-                self.clicker.click(sx, sy)
-                self._recent_clicks.append((hit.c, now))
-                self._verify.append((key, hit, now + self.VERIFY_DELAY, owner.cat.id, owner.cat.box.c))
-                self._last_full = -1e9  # other icons were left for the next tick: search them then
+            elif self.should_stop():
+                break
+            elif self._click(events, owner, key, hit, zone, now):
                 break  # one click per tick: a click may change the screen (popup, cat moves)
         self._check_late(events, now)
         return events
