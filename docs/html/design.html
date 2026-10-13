@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>봉고캣 헬퍼 설계도</title>
+<style>
+:root{--bg:#f7f6f3;--card:#fff;--text:#1f1e1c;--muted:#6b6862;--line:#e3e0da;--accent:#3b6fd8;--ok:#2f8a4f;--bad:#c4453b;--warn:#b7791f;--soft:#f0eee9}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1a1917;--card:#24231f;--text:#ece9e3;--muted:#a19d95;--line:#3a3833;--accent:#7aa2f0;--ok:#5cc07f;--bad:#ec7a70;--warn:#e0a84a;--soft:#2d2b27}}
+:root[data-theme="dark"]{--bg:#1a1917;--card:#24231f;--text:#ece9e3;--muted:#a19d95;--line:#3a3833;--accent:#7aa2f0;--ok:#5cc07f;--bad:#ec7a70;--warn:#e0a84a;--soft:#2d2b27}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.7 "Malgun Gothic","Apple SD Gothic Neo",system-ui,sans-serif}
+main{max-width:920px;margin:0 auto;padding:32px 16px 80px}
+h1{font-size:28px;margin:0 0 4px;font-weight:600}
+h2{font-size:20px;margin:40px 0 12px;font-weight:600}
+.sub{color:var(--muted);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px}
+.progress{display:flex;align-items:center;gap:12px;margin:20px 0}
+.bar{flex:1;height:8px;background:var(--soft);border-radius:99px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--ok);transition:width .3s}
+.steps{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.step{display:grid;grid-template-columns:44px 1fr;gap:14px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.step.done{opacity:.6}
+.num{width:44px;height:44px;border-radius:50%;background:var(--soft);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:18px}
+.step.done .num{background:var(--ok);color:#fff}
+.step h3{margin:0;font-size:17px;font-weight:600;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.step p{margin:4px 0 8px;color:var(--muted);font-size:15px}
+.tag{font-size:12px;padding:1px 9px;border-radius:99px;border:1px solid var(--line);color:var(--muted);font-weight:500}
+.tag.you{border-color:var(--warn);color:var(--warn)}
+.tag.me{border-color:var(--accent);color:var(--accent)}
+.check{font-size:14px;display:flex;gap:6px;align-items:center;cursor:pointer;color:var(--text)}
+.check input{width:16px;height:16px}
+ul.mini{margin:4px 0 8px;padding-left:20px;font-size:14px}
+code{font-family:Consolas,monospace;font-size:.9em;background:var(--soft);padding:1px 5px;border-radius:4px}
+pre{background:var(--soft);padding:12px 14px;border-radius:10px;overflow-x:auto;font-size:13px;line-height:1.6;margin:8px 0;white-space:pre-wrap;word-break:break-all}
+.goal{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.goal img{width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+.ph{border:2px dashed var(--line);border-radius:10px;min-height:200px;display:flex;align-items:center;justify-content:center;text-align:center;color:var(--muted);padding:16px;font-size:14px}
+.scene{position:relative;height:230px;background:var(--soft);border-radius:10px;overflow:hidden;font-size:12px}
+.band{position:absolute;left:6px;right:6px;border:1.5px dashed;border-radius:4px}
+.band span{position:absolute;right:6px;top:2px;font-size:11px}
+.box{position:absolute;background:var(--card);border:2px solid;border-radius:5px;padding:1px 8px;white-space:nowrap}
+.cat{position:absolute;width:64px;height:58px;border-radius:32px 32px 8px 8px;background:var(--card);border:1px solid var(--line)}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:8px}
+.legend b{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}
+.flow span{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+.flow em{color:var(--muted);font-style:normal}
+.ok{color:var(--ok)}.bad{color:var(--bad)}
+</style>
+</head>
+<body>
+<main>
+<h1>봉고캣 헬퍼 설계도</h1>
+<p class="sub">지정한 이름에게만 자동 선물하고, 채팅을 기록하는 Windows 프로그램 · 단계마다 확인하고 다음으로 넘어갑니다</p>
+
+<div class="progress"><strong id="pct">0 / 10</strong><div class="bar"><i id="barfill"></i></div></div>
+
+<h2>한눈에 보는 흐름</h2>
+<div class="card flow">
+  <span>0 Codex로 목표 그림 🔒</span><em>→</em>
+  <span>1~3 기본 모듈</span><em>→</em><span>4~5 보정·디버그 🔒</span><em>→</em>
+  <span>6 자동 선물 🔒</span><em>→</em><span>7 채팅 기록 🔒</span><em>→</em><span>8 제어 패널 🔒</span>
+</div>
+<div class="legend"><span><span class="tag me">Claude</span> 제가 만들고 테스트</span><span><span class="tag you">직접 확인</span> 실제 게임 화면에서 확인해 주셔야 하는 단계</span></div>
+
+<h2>목표 그림</h2>
+<div class="goal">
+  <div class="card">
+    <div style="font-size:14px;color:var(--muted);margin-bottom:8px">Codex(ChatGPT) 생성본</div>
+    <img id="goalimg" src="goal/goal_v4.png" alt="Codex가 생성한 목표 그림" onerror="this.replaceWith(document.getElementById('ph').content.cloneNode(true))">
+    <template id="ph"><div class="ph">아직 생성 전입니다.<br>0단계에서 Codex로 만들면 여기에 표시됩니다.<br><code>goal/goal_v4.png</code></div></template>
+  </div>
+  <div class="card">
+    <div style="font-size:14px;color:var(--muted);margin-bottom:8px">Claude 스케치 (감지 화면)</div>
+    <div class="scene">
+      <div class="band" style="top:6px;bottom:6px;border-color:var(--muted)"><span style="color:var(--muted)">감지 영역 1개</span></div>
+      <div class="box" style="left:14px;top:24px;border-color:var(--accent)">야옹 야옹</div>
+      <div class="box" style="left:14px;top:62px;border-color:var(--ok);color:var(--ok)">100</div>
+      <div class="box" style="left:66px;top:62px;border-color:var(--ok);color:var(--ok)">1000</div>
+      <div class="cat" style="left:34px;top:96px"></div>
+      <div class="box" style="left:40px;top:160px;border-color:var(--ok)">리네 ✓</div>
+      <div class="box" style="left:150px;top:100px;border-color:var(--bad);color:var(--bad)">100</div>
+      <div class="box" style="left:202px;top:100px;border-color:var(--bad);color:var(--bad)">1000</div>
+      <div class="cat" style="left:170px;top:134px"></div>
+      <div class="box" style="left:176px;top:196px;border-color:var(--bad)">철수 ✗</div>
+    </div>
+    <div class="legend"><span><b style="background:var(--ok)"></b>대상 → 클릭</span><span><b style="background:var(--bad)"></b>불일치 → 건너뜀</span><span><b style="background:var(--accent)"></b>채팅</span></div>
+    <div style="font-size:13px;color:var(--muted);margin-top:6px">높이가 달라도 각 아이콘을 <b>자기 이름표 기준 위치</b>로 연결합니다. v2 그림의 가로 띠 3개 대신 감지 영역 1개를 씁니다.</div>
+  </div>
+</div>
+
+<h2>단계별 순서</h2>
+<ol class="steps" id="steps">
+
+<li class="step" data-id="s0"><div class="num">0</div><div>
+  <h3>Codex로 목표 그림 만들기 <span class="tag me">Claude</span><span class="tag you">직접 확인</span></h3>
+  <p>API 키 없이 이미 로그인된 ChatGPT 계정(OAuth)으로 Codex가 그림을 그립니다.</p>
+  <ul class="mini">
+    <li class="ok">확인됨: Codex CLI 0.162 · <code>Logged in using ChatGPT</code> · 그림 생성 기능 켜짐</li>
+    <li>실행 예: <code>codex exec "…image_gen으로 그려서 docs/goal/goal_v1.png 로 저장"</code></li>
+    <li>마음에 안 들면 수정 요청 → v2, v3로 다시 생성</li>
+  </ul>
+  <label class="check"><input type="checkbox"> 그림 확인하고 승인함</label>
+</div></li>
+
+<li class="step" data-id="s1"><div class="num">1</div><div>
+  <h3>기본 골격 · 화면 캡처 · 설정 파일 <span class="tag me">Claude</span></h3>
+  <p>폴더 구조, 고해상도(DPI) 보정, 모니터 캡처, <code>config.json</code> 읽기/쓰기</p>
+  <label class="check"><input type="checkbox"> 완료</label>
+</div></li>
+
+<li class="step" data-id="s2"><div class="num">2</div><div>
+  <h3>글자 인식(OCR) <span class="tag me">Claude</span></h3>
+  <p>한국어 전용 글자 인식 모델(RapidOCR)로 이름·채팅 읽기. 숫자(<code>156 758</code>, <code>03:29</code>)는 자동 제외</p>
+  <ul class="mini"><li>Windows 내장 OCR은 짧은 이름을 70%만 맞혀서 교체 → 이름 30/30 정확, 한 번 읽는 데 0.03초</li><li>채팅 문장 48개 중 46개 정확 · 모델 파일 12MB (첫 실행 때 자동으로 받음)</li></ul>
+  <label class="check"><input type="checkbox"> 완료</label>
+</div></li>
+
+<li class="step" data-id="s3"><div class="num">3</div><div>
+  <h3>선물 아이콘 찾기 · 주인 이름 연결 <span class="tag me">Claude</span></h3>
+  <p>고양이마다 좌우로 뜨는 <b>1000 선물 아이콘 2개</b>를 찾고 (왼쪽/오른쪽은 이름표 기준 위치로 구분), 아이콘과 이름표 사이 거리(보정 때 측정)로 주인을 판단</p>
+  <ul class="mini">
+    <li>고양이 위치가 <b>가로·세로 모두 무작위</b>여도 됨: 이름표를 고양이의 기준점으로 삼고, 아이콘·말풍선은 "이름표에서 얼마나 떨어져 있나"로 연결</li>
+    <li>높이가 다 같을 때도, 제각각일 때도 같은 방식 하나로 처리 · 고양이마다 따로 설정 없음</li>
+    <li>자원 절약: 화면에서 바뀐 칸만 처리 · 이름은 새 고양이가 나타날 때만 한 번 읽고 기억 · 말풍선도 새로 뜰 때만 읽음 · 조용할 땐 검사 간격 늘림</li>
+    <li>헷갈리게 가까운 두 고양이 사이 아이콘은 보내지 않음</li>
+    <li class="ok">완료: 가상 화면 3종(같은 높이 · 다른 높이 · 붙어서 엇갈림)에서 아이콘 6개 전부 올바른 주인에게 연결 · 고양이 6마리 화면 검사 약 15ms</li>
+  </ul>
+  <label class="check"><input type="checkbox"> 완료</label>
+</div></li>
+
+<li class="step" data-id="s4"><div class="num">4</div><div>
+  <h3>보정 (setup) <span class="tag you">직접 확인</span></h3>
+  <p>선물이 떠 있는 고양이 <b>1마리</b>로 한 번만: 드래그로 지정</p>
+  <ul class="mini"><li>① 감지 영역(고양이가 나타날 수 있는 범위 전체) ② 왼쪽 1000 아이콘 ③ 오른쪽 1000 아이콘 ④ 이름표 ⑤ 말풍선(있으면)</li><li>이 1마리로 잰 거리를 모든 고양이에 적용</li>
+  <li>드래그가 끝나면 새 설정으로 바로 감지해 보고 "이름표 N개, 아이콘 N개 중 주인 판별 N개"와 확인 그림을 보여준 뒤 저장 여부를 물어봄</li>
+  <li>실행: <code>bongocat_helper</code> 폴더에서 <code>.venv\Scripts\python bongo.py setup</code></li></ul>
+  <label class="check"><input type="checkbox"> 내 PC에서 보정 완료</label>
+</div></li>
+
+<li class="step" data-id="s5"><div class="num">5</div><div>
+  <h3>디버그 화면 확인 (test-ocr) <span class="tag you">직접 확인</span></h3>
+  <p>박스와 연결선이 그려진 <code>debug.png</code>로 확인 · <b>높이가 같은 상황, 다른 상황 둘 다</b> 확인 · CPU 사용량 측정</p>
+  <ul class="mini">
+    <li class="ok">실제 게임 화면으로 확인: 이름표 '리네'를 신뢰도 0.999로 읽음 · 내 고양이 숫자칸은 자동 무시 · CPU 0.4%</li>
+    <li>고친 것: 고양이 발 애니메이션이 이름표를 가리면 '우리네'처럼 잘못 읽힘 → <b>같은 이름이 확실하게 2번 읽혀야 확정</b>, 확정 전엔 선물 안 보냄</li>
+    <li>고친 것: 처음 측정 때 CPU 65% → 글자 인식 엔진 설정 수정 후 0.4%</li>
+    <li>남은 확인: 선물 아이콘이 떠 있을 때 보정 → 디버그(메뉴 3번)로 아이콘 점수·주인 연결 확인</li>
+  </ul>
+  <label class="check"><input type="checkbox"> 박스와 이름이 정확함</label>
+</div></li>
+
+<li class="step" data-id="s6"><div class="num">6</div><div>
+  <h3>자동 선물 <span class="tag me">Claude</span><span class="tag you">직접 확인</span></h3>
+  <p>먼저 <b>연습 모드(dry run)</b>로 "클릭했을 것"만 기록 → 맞으면 실제 클릭 1회 시험</p>
+  <ul class="mini"><li>이름이 <b>정확히</b> 같을 때만 클릭 (헷갈리면 안 보냄)</li><li><b>F12</b> = 비상 정지</li>
+    <li><b>30분 카운트다운</b>: 선물을 누르면 그 사람·아이콘별로 "다음 선물까지 남은 시간"을 패널에 표시 (예: <code>리네 왼쪽 1000 · 12:34 남음</code> → 준비되면 '준비됨')</li>
+    <li>기다리는 동안은 그 고양이 검사를 쉬고, 15초 전부터 다시 확인 → 자원 절약</li>
+    <li>프로그램을 다시 켜도 남은 시간 유지 · 클릭 후 아이콘이 실제로 사라졌는지 확인한 뒤에만 카운트 시작</li>
+    <li class="ok">완료: 메뉴 6번 = 연습 모드(기록만), 7번 = 실제 클릭(yes 입력해야 시작) · 5번 = 선물 대상 편집 · 기록은 <code>logs/actions_날짜.txt</code></li>
+    <li class="ok">실제 화면에서 고친 것: 작은 아이콘이 검색에서 빠지던 문제 (작은 그림은 줄이지 않고 원래 크기로 찾음)</li>
+    <li>남은 확인: 아이콘이 떠 있을 때 보정 → 연습 모드로 대상에만 기록되는지 → 실제 클릭 1번 (선물이 가는지, 확인 창이 뜨는지)</li></ul>
+  <label class="check"><input type="checkbox"> 연습 모드 확인</label>
+  <label class="check"><input type="checkbox" data-sub> 실제 선물 1회 성공</label>
+</div></li>
+
+<li class="step" data-id="s7"><div class="num">7</div><div>
+  <h3>채팅 기록 <span class="tag me">Claude</span><span class="tag you">직접 확인</span></h3>
+  <p>실행 중 PC에 자동 저장(<code>data/chat.db</code>) → 패널에서 날짜·화자별로 보기 → 원할 때 <b>MD로 내보내기</b></p>
+  <ul class="mini"><li>프로그램이 꺼지거나 튕겨도 기록 유지 · 같은 말은 한 번만 저장</li><li>내보낸 파일: <code>exports/chat_날짜.md</code></li>
+    <li class="ok">완료: 메뉴 8번 = 채팅 보기(날짜·말한 사람·검색어) + MD 내보내기 · 9번 = 말풍선 보정(누가 말했는지 알기 위해, 말풍선이 떠 있을 때 1번)</li>
+    <li class="ok">가상 화면에서 말풍선 2개를 말한 사람까지 정확히 기록</li>
+    <li>남은 확인: 실제 게임 말풍선이 떠 있을 때 9번 → 3번(디버그)으로 제대로 잡히는지</li></ul>
+  <label class="check"><input type="checkbox"> 화자와 내용이 맞게 기록됨</label>
+</div></li>
+
+<li class="step" data-id="s8"><div class="num">8</div><div>
+  <h3>제어 패널 (GUI) <span class="tag me">Claude</span><span class="tag you">직접 확인</span></h3>
+  <p>시작/정지 · 보정 · OCR 테스트 버튼, 선물 대상 편집, 그리고 탭 2개(<b>판단 로그</b> / <b>채팅 기록</b>)를 한 창에서</p>
+  <ul class="mini">
+    <li class="ok">완료: exe를 더블클릭하면 이 창이 열림 (약 3초)</li>
+    <li>보정 · 말풍선 보정 · OCR 테스트 버튼은 마우스로 드래그하는 창이 따로 열림 (끝나면 다시 시작 누르면 반영)</li>
+    <li>dry run 체크를 끄고 시작하면 "실제로 클릭합니다" 확인창이 뜸</li>
+    <li class="ok">고친 것: 정지를 눌러도 화면에 '실행 중'이 남던 문제 · 이름을 읽는 1초 동안 '주인 불명' 기록이 잔뜩 찍히던 문제</li>
+  </ul>
+  <label class="check"><input type="checkbox"> 패널만으로 전체 사용 가능</label>
+</div></li>
+
+<li class="step" data-id="s9"><div class="num">9</div><div>
+  <h3>마무리: 최종 exe · 점검 · 문서 <span class="tag me">Claude</span><span class="tag you">직접 확인</span></h3>
+  <p>최종 exe 다시 만들기 · 빈 폴더에서 실행 확인 · 테스트 106개 통과 · 두 문서 정리</p>
+  <ul class="mini">
+    <li>게임에서 확인할 순서: ① 선물 떠 있을 때 [보정] ② 말풍선 떠 있을 때 [말풍선 보정] ③ [OCR 테스트] ④ 연습 모드로 시작 ⑤ 연습 모드 끄고 실제 1번 ⑥ 30분 뒤 선물이 다시 생기는지</li>
+  </ul>
+  <label class="check"><input type="checkbox"> 실제 게임에서 ①~⑥ 확인</label>
+</div></li>
+</ol>
+
+<h2>Codex 코드 리뷰 (1차)</h2>
+<div class="card">
+  <ul class="mini" style="font-size:15px;margin:0">
+    <li>Codex가 14가지를 지적 → 모두 코드에서 확인되어 <b>전부 수정</b> (3번은 부분 완화)</li>
+    <li class="ok">엉뚱한 고양이 방지: 선물 직전에 이름표를 한 번 더 읽어 같은 이름일 때만 보냄 · 떠난 고양이를 목록에서 확실히 지움</li>
+    <li class="ok">클릭 안전: 한 번에 1개만 클릭, 클릭 직전 화면을 새로 찍어 아이콘이 그대로인지 확인 · 마우스가 제자리로 못 가면 클릭 안 함 · F12가 언제든 바로 먹힘</li>
+    <li class="ok">연습 모드 기록 때문에 실제 선물이 30분 막히던 문제 · 실행 중 대상 바꾸면 바로 반영 · 패널이 가끔 멈출 수 있던 문제</li>
+    <li>3번(감지 영역 경계에 걸린 고양이)은 판단 거리를 줄여 위험을 줄임: 보정할 때 감지 영역을 넉넉하게 잡아 주세요</li>
+  </ul>
+</div>
+
+<h2>실제 제어 패널</h2>
+<div class="goal">
+  <div class="card">
+    <div style="font-size:14px;color:var(--muted);margin-bottom:8px">판단 로그 탭 (가상 화면으로 연습 모드 실행)</div>
+    <img src="shots/gui_log_tab.png" alt="판단 로그 탭">
+  </div>
+  <div class="card">
+    <div style="font-size:14px;color:var(--muted);margin-bottom:8px">채팅 기록 탭</div>
+    <img src="shots/gui_chat_tab.png" alt="채팅 기록 탭">
+  </div>
+</div>
+
+<h2>실행 파일 (exe)</h2>
+<div class="card">
+  <ul class="mini" style="font-size:15px;margin:0">
+    <li><code>D:\BongoAutoCat\release\BongoHelper.exe</code> 더블클릭 → <b>제어 패널</b></li>
+    <li>예전 번호 메뉴가 필요하면: <code>BongoHelper.exe menu</code> (1 보정 · 2 캡처 테스트 · 3 디버그 · 4 셀프 테스트 · 5 선물 대상 · 6 연습 실행 · 7 실제 실행 · 8 채팅 기록 · 9 말풍선 보정)</li>
+    <li>파이썬 설치 필요 없음 · 글자 인식 모델 포함 · 설정/로그/채팅 기록은 exe 옆 폴더에 저장 (<code>config.json</code>, <code>templates</code>, <code>logs</code>, <code>data</code>, <code>exports</code>)</li>
+    <li>처음 켤 때 몇 초 걸림 (압축 풀기 + 모델 로딩)</li>
+  </ul>
+</div>
+
+<h2>안전 원칙</h2>
+<div class="card">
+  <ul class="mini" style="font-size:15px;margin:0">
+    <li>처음엔 항상 연습 모드 — 실제 클릭은 직접 켜야 동작</li>
+    <li>이름이 애매하면 보내지 않음 (잘못 보내는 것보다 빠뜨리는 게 나음)</li>
+    <li>모든 판단은 <code>logs/actions_날짜.txt</code>에 기록</li>
+    <li>자동 클릭에 따른 계정 제재 위험은 사용자 책임 (원본 명세 9장)</li>
+  </ul>
+</div>
+</main>
+<script>
+const KEY='bongocat-design-checks';
+let saved={};try{saved=JSON.parse(localStorage.getItem(KEY)||'{}')}catch(e){}
+const boxes=[...document.querySelectorAll('.step input[type=checkbox]')];
+boxes.forEach((b,i)=>{b.checked=!!saved[i];b.addEventListener('change',()=>{saved[i]=b.checked;try{localStorage.setItem(KEY,JSON.stringify(saved))}catch(e){}render()})});
+function render(){
+  const steps=[...document.querySelectorAll('.step')];let done=0;
+  steps.forEach(s=>{const cb=[...s.querySelectorAll('input')];const ok=cb.every(c=>c.checked);s.classList.toggle('done',ok);if(ok)done++});
+  document.getElementById('pct').textContent=done+' / '+steps.length;
+  document.getElementById('barfill').style.width=(done/steps.length*100)+'%';
+}
+render();
+</script>
+</body>
+</html>

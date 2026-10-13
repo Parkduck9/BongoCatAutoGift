@@ -1,0 +1,23 @@
+# Python / tooling
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+
+# PyInstaller output (the exe is ~130 MB, over GitHub's 100 MB file limit)
+bongocat_helper/build/
+bongocat_helper/dist/
+release/
+
+# Downloaded on first run (RapidOCR Korean model)
+bongocat_helper/models/
+
+# Per-user runtime data, created next to the program / exe
+bongocat_helper/config.json
+bongocat_helper/templates/
+bongocat_helper/logs/
+bongocat_helper/data/
+bongocat_helper/exports/
+
+# Real game capture with another player's nickname: kept local only
+bongocat_helper/tests/fixtures/real_zone_rine.png

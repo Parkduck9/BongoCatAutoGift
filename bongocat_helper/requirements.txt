@@ -1,0 +1,7 @@
+mss
+opencv-python
+numpy
+pillow
+rapidocr
+onnxruntime
+pytest
