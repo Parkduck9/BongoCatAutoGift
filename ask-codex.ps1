@@ -1,6 +1,6 @@
 # Ask Codex (existing ChatGPT login, no API key) a question about this project.
 # Read-only sandbox: Codex can read the project but cannot change files.
-# Usage: powershell.exe -NoProfile -File 'D:\BongoAutoCat\ask-codex.ps1' -Prompt '...'
+# Usage: powershell.exe -NoProfile -File 'D:\BongoCatAutoGift\ask-codex.ps1' -Prompt '...'
 # Prints only Codex's final answer on stdout; progress goes to stderr.
 param(
     [Parameter(Mandatory)] [string]$Prompt

@@ -21,3 +21,16 @@ bongocat_helper/exports/
 
 # Real game capture with another player's nickname: kept local only
 bongocat_helper/tests/fixtures/real_zone_rine.png
+# Credentials and local records
+.env
+.env.*
+!.env.example
+auth.json
+*.pem
+*.key
+*.db
+*.db-*
+*.sqlite*
+*.tmp
+*.exe
+*.dll

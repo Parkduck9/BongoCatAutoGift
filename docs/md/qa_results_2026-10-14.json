@@ -1,0 +1,63 @@
+{
+  "animation_delays_ocr": {
+    "frames": 10,
+    "ocr_calls": 0,
+    "saved": [],
+    "issue_reproduced": true
+  },
+  "same_visible_sentence_duplicated": {
+    "saved": [
+      [
+        1,
+        "?",
+        "hello"
+      ],
+      [
+        11,
+        "?",
+        "hello"
+      ]
+    ],
+    "issue_reproduced": true
+  },
+  "setup_lost_after_target_edit": {
+    "before_monitor": 2,
+    "after_monitor": 1,
+    "after_region": [
+      0,
+      0,
+      0,
+      0
+    ],
+    "after_tag_height": null,
+    "issue_reproduced": true
+  },
+  "real_language_ocr": [
+    {
+      "expected": "안녕하세요",
+      "actual": "안녕하세요",
+      "font_missing_chars": [],
+      "exact_match": true
+    },
+    {
+      "expected": "Hello world",
+      "actual": "Hello world",
+      "font_missing_chars": [],
+      "exact_match": true
+    },
+    {
+      "expected": "こんにちは",
+      "actual": "h",
+      "font_missing_chars": [],
+      "exact_match": false
+    },
+    {
+      "expected": "你好世界",
+      "actual": "",
+      "font_missing_chars": [
+        "你"
+      ],
+      "exact_match": false
+    }
+  ]
+}

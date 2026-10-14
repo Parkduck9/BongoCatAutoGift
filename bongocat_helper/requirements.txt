@@ -1,7 +1,7 @@
 mss
-opencv-python
+opencv-python==5.0.0.93
 numpy
 pillow
-rapidocr
+rapidocr==3.9.0
 onnxruntime
 pytest

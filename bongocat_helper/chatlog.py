@@ -32,33 +32,48 @@ class Bubble:
     last_seen: float
     done: bool = False
     tries: int = 0
+    anchor: tuple | None = None
+    owner_id: int | None = None
 
 
 class BubbleReader:
-    """Track bubble boxes; OCR each once after it settled (`settle_sec`, pop-in animation)."""
+    """Read settled bubbles, then block that position for four seconds."""
+
+    POSITION_BLOCK_SEC = 4
 
     def __init__(self, read=ocr.read_lines, settle_sec=0.5, ttl=2.0, min_score=0.8, max_tries=3,
-                 move_tol=8):
+                 move_tol=8, on_failure=lambda name, attempt, total: None):
         self.read, self.settle, self.ttl = read, settle_sec, ttl
         self.min_score, self.max_tries, self.move_tol = min_score, max_tries, move_tol
+        self.on_failure = on_failure
         self._bubbles: list[Bubble] = []
+        self._blocked = []  # [(name-tag anchor, until)]; survives bubble disappearance
 
     def _match(self, box):
         for b in self._bubbles:
-            if abs(box.c[0] - b.box.c[0]) <= self.move_tol and abs(box.c[1] - b.box.c[1]) <= self.move_tol \
-                    and abs(box.w - b.box.w) <= max(4, 0.15 * b.box.w):
+            # The tail/right-bottom attachment stays put when the text width changes.
+            if abs(box.x + box.w - b.box.x - b.box.w) <= self.move_tol \
+                    and abs(box.y + box.h - b.box.y - b.box.h) <= self.move_tol:
                 return b
         return None
 
     def update(self, boxes, zone, now, registry, bubble_offset, max_dist, scanned=None):
         """-> [(speaker, text)] for bubbles read this call. Speaker = cat whose tag + bubble
         offset is closest (UNKNOWN when the offset was never calibrated or no cat fits)."""
+        found = set()
         for box in boxes:
             b = self._match(box)
             if b:
                 b.box, b.last_seen = box, now
             else:
-                self._bubbles.append(Bubble(box, now, now))
+                b = Bubble(box, now, now)
+                self._bubbles.append(b)
+            found.add(id(b))
+        # A scanned area without its bubble confirms disappearance immediately.
+        # Do not let subsequent unchanged frames revive an already-read bubble.
+        self._bubbles = [b for b in self._bubbles if id(b) in found or (
+            scanned is not None and not any(x <= b.box.c[0] < x + w and y <= b.box.c[1] < y + h
+                                           for x, y, w, h in scanned))]
         for b in self._bubbles:
             cx, cy = b.box.c
             if scanned is not None and not any(x <= cx < x + w and y <= cy < y + h for x, y, w, h in scanned):
@@ -66,21 +81,44 @@ class BubbleReader:
         self._bubbles = [b for b in self._bubbles if now - b.last_seen <= self.ttl]
 
         said = []
+        self._blocked = [(point, until) for point, until in self._blocked if now < until]
         for b in self._bubbles:
-            if b.done or now - b.first_seen < self.settle or b.tries >= self.max_tries:
-                continue
             owner = registry.owner_of(b.box.c, {"bubble": bubble_offset}, max_dist, 10) if bubble_offset else None
-            if owner and not owner.cat.is_named:
-                continue  # speaker's name still being read; read the bubble once it is known
-            if owner and not registry.reverify(owner.cat, zone, now):
-                continue  # the tag does not read that name right now: do not pin it on them
-            b.tries += 1
+            # Once assigned, the speaker is tied to its visible tag, not bubble width.
+            cat = registry.get(b.owner_id) if b.owner_id is not None else None
+            if cat is None and owner is not None:
+                cat = owner.cat
+            if cat is not None and not cat.is_named:
+                continue
+            speaker = cat.name if cat is not None else UNKNOWN
+            if cat is not None:
+                b.anchor, b.owner_id = cat.box.c, cat.id
+            elif b.anchor is None:
+                b.anchor = (b.box.x + b.box.w, b.box.y + b.box.h)
+            cx, cy = b.anchor
+            if any(abs(cx - point[0]) <= self.move_tol and abs(cy - point[1]) <= self.move_tol
+                   for point, _ in self._blocked):
+                continue
+            if b.done:
+                b.done, b.tries = False, 0  # the position's four-second block expired
             x, y, w, h = b.box.x + 3, b.box.y + 3, b.box.w - 6, b.box.h - 6
-            lines = [l for l in self.read(zone[y:y + h, x:x + w]) if l.score >= self.min_score]
+            crop = zone[y:y + h, x:x + w]
+            if now - b.first_seen < self.settle or b.tries >= self.max_tries:
+                continue
+            if cat is not None and not registry.reverify(cat,zone,now):
+                continue
+            speaker = cat.name if cat is not None else UNKNOWN
+            b.tries += 1
+            try:
+                lines = [l for l in self.read(crop) if l.score >= self.min_score]
+            except Exception:  # a failed chat read must not stop gift detection
+                lines = []
             if not lines:
+                self.on_failure(speaker, b.tries, self.max_tries)
                 continue
             b.done = True
-            said.append((owner.cat.name if owner else UNKNOWN, " ".join(l.text for l in lines)))
+            self._blocked.append((b.anchor, now + self.POSITION_BLOCK_SEC))
+            said.append((speaker, " ".join(l.text for l in lines)))
         return said
 
 

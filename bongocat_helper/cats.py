@@ -55,7 +55,7 @@ def read_tag(crop, box):
 
 
 class CatRegistry:
-    def __init__(self, read=read_tag, move_tol=8, ttl=10, confirm_score=0.97, votes=2,
+    def __init__(self, read=read_tag, move_tol=1, ttl=10, confirm_score=0.97, votes=2,
                  retry_sec=0.5, max_reads=12, numeric_score=0.6):
         self.read, self.move_tol, self.ttl = read, move_tol, ttl
         self.confirm_score, self.votes, self.numeric_score = confirm_score, votes, numeric_score
@@ -99,9 +99,10 @@ class CatRegistry:
             if abs(bx - cx) <= self.move_tol and abs(by - cy) <= self.move_tol \
                     and abs(box.w - cat.box.w) <= max(4, 0.15 * cat.box.w):
                 return cat
-        for cat in self._cats:  # overlapping an existing tag = same cat, never a duplicate
+        for cat in self._cats:  # a partial detection is not evidence of a new position
             b = cat.box
-            if b.x <= bx < b.x + b.w and b.y <= by < b.y + b.h:
+            if box.w < b.w - max(4, 0.15 * b.w) \
+                    and b.x <= bx < b.x + b.w and b.y <= by < b.y + b.h:
                 return cat
         return None
 
@@ -141,8 +142,6 @@ class CatRegistry:
             found.add(cat.id)
 
         def inside_scan(cat):
-            """Whole tag inside a scanned rect: only then does 'not found' mean 'gone'
-            (a tag cut by the rect edge is dropped by find_tag_boxes)."""
             if scanned is None:
                 return True
             b = cat.box
@@ -156,7 +155,7 @@ class CatRegistry:
                 cat.missing = True        # looked there, not found: not an owner any more
             elif not cat.missing:
                 cat.last_seen = now       # area unchanged -> still there
-        self._cats = [c for c in self._cats if now - c.last_seen <= self.ttl]
+        self._cats = [c for c in self._cats if not c.missing and now - c.last_seen <= self.ttl]
         # pending tags are re-read from the current frame even if their area did not change:
         # the animation that spoiled earlier reads may have stopped, leaving a clean, static tag
         for cat in self._cats:
@@ -164,9 +163,8 @@ class CatRegistry:
                 self._read(cat, frame, now)
 
     def owner_of(self, point, offsets, max_dist, ambiguity_px):
-        """Owner among named, pending AND missing cats (a neighbor whose tag is unreadable or
-        hidden for a moment must still count, or its icon could be pinned on a named cat next to
-        it). None = nobody fits. Such an owner has `owner.cat.is_named` False: callers wait."""
+        """Owner among currently visible named and pending positions. Pending tags block
+        their own icons until their names are confirmed; departed positions are removed."""
         anchors = [c for c in self._cats if c.state != IGNORED]
         o = detect.assign_owner(point, [c.box.c for c in anchors], offsets, max_dist, ambiguity_px)
         return CatOwner(anchors[o.index], o.side, o.dist) if o else None

@@ -1,21 +1,4 @@
-"""Bongo Cat helper entry point.
-
-  python bongo.py capture-test [--monitor N]   save a screenshot to logs/ to check capture
-  python bongo.py setup [--monitor N] [--delay S] [--image PNG]
-                                              calibrate on one cat (drag boxes), save config
-  python bongo.py selftest                     check OCR model + detection work on this PC
-  python bongo.py test-ocr [--image PNG] [--watch SEC]
-                                              detect once with saved settings -> logs/debug.png;
-                                              --watch: run the loop for SEC seconds, report ms/CPU
-  python bongo.py targets [--add NAME ...] [--remove NAME ...]   edit gift targets
-  python bongo.py run [--live]                  gift loop + chat log; practice mode unless --live. F12 = stop
-  python bongo.py setup --bubble                calibrate where chat bubbles sit (speaker detection)
-  python bongo.py chat [show|export] [--date D] [--speaker S] [--search W]
-                                              chat log from data/bongo.db; export -> exports/*.md
-  python bongo.py menu                         numbered console menu
-  (no arguments = control panel window; this is what double-clicking the .exe opens)
-  (test-ocr / run / chat / gui come in later steps)
-"""
+"""Bongo Helper: one list window. CLI exposes only non-clicking diagnostics."""
 import argparse
 import sys
 import time
@@ -66,6 +49,7 @@ def _pick_monitor(cap, default):
 
 def cmd_setup(args, cfg):
     import cv2
+    from tkinter import messagebox
 
     import calib
 
@@ -92,11 +76,16 @@ def cmd_setup(args, cfg):
         while True:
             rects = calib.select_rects(frame, steps=calib.BUBBLE_STEPS, view_rect=cfg["region"])
             try:
-                cfg["offsets"]["bubble"] = calib.compute_bubble_offset(frame, rects)
+                bubble_offset = calib.compute_bubble_offset(frame, rects)
                 break
             except calib.SetupError as e:
                 print(f"오류: {e}: 다시 지정합니다.")
+                print(f"보정 오류: {e}", file=sys.stderr, flush=True)
+                messagebox.showerror("보정 영역 확인", str(e))
+        cfg = config.load()
+        cfg["offsets"]["bubble"] = bubble_offset
         config.save(cfg)
+        print("말풍선 보정 저장 완료", file=sys.stderr, flush=True)
         print(f"말풍선 위치 저장: 이름표 기준 {cfg['offsets']['bubble']}")
         return 0
 
@@ -107,6 +96,8 @@ def cmd_setup(args, cfg):
             break
         except calib.SetupError as e:
             print(f"오류: {e}: 처음부터 다시 지정합니다.")
+            print(f"보정 오류: {e}", file=sys.stderr, flush=True)
+            messagebox.showerror("보정 영역 확인", str(e))
 
     print("새 설정으로 감지해 보는 중... (처음엔 OCR 모델 로딩으로 몇 초 걸립니다)")
     report = calib.verify(frame, res, threshold=cfg["match_threshold"],
@@ -117,46 +108,44 @@ def cmd_setup(args, cfg):
     print(f"  오프셋 왼쪽 {res.offsets['left']} / 오른쪽 {res.offsets['right']} / 이름표 높이 {res.tag['height']}px")
     print(f"  확인 이미지: {LOG_DIR / 'setup_check.png'}")
     calib.show(report.image)
-    if input("이 설정을 저장할까요? [Y/n]: ").strip().lower() in ("", "y", "yes", "ㅛ"):
+    if messagebox.askyesno("보정 저장", f"모니터 {monitor}의 보정을 저장할까요?\n"
+                          f"이름표 {report.tags}개 · 선물 아이콘 {report.icons}개\n"
+                          f"감지 영역: {res.region}"):
+        cfg = config.load()  # keep target edits saved while setup was open
         calib.apply(cfg, res, monitor, config.BASE_DIR / "templates")
         config.save(cfg)
         print(f"저장했습니다: {config.CONFIG_PATH}")
+        print(f"보정 저장 완료: {config.CONFIG_PATH}", file=sys.stderr, flush=True)
     else:
         print("저장하지 않았습니다.")
+        print("사용자가 보정 저장을 취소했습니다.", file=sys.stderr, flush=True)
+        return 1
 
 
 def cmd_selftest(args, cfg):
-    """Render Korean names and a fake scene, run OCR + detection on them."""
-    import numpy as np
-    from PIL import Image, ImageDraw, ImageFont
-
-    import detect
-    import ocr
-
-    font_path = r"C:\Windows\Fonts\malgun.ttf"
-    font = ImageFont.truetype(font_path, 20)
-    ok = True
-    t0 = time.perf_counter()
-    ocr.ensure_ready()
-    print(f"OCR 모델 로딩: {(time.perf_counter() - t0) * 1000:.0f} ms ({ocr.MODEL_DIR})")
-    for name in ["리네", "철수", "민지", "야옹 야옹"]:
-        img = Image.new("RGB", (40 + 22 * len(name), 40), "white")
-        ImageDraw.Draw(img).text((20, 6), name, fill="black", font=font)
-        t0 = time.perf_counter()
-        got = " ".join(l.text for l in ocr.read_lines(np.array(img)[:, :, ::-1].copy()))
-        good = ocr.normalize(got) == ocr.normalize(name)
-        ok &= good
-        print(f"  OCR {'OK ' if good else 'FAIL'} {name!r} -> {got!r} ({(time.perf_counter() - t0) * 1000:.0f} ms)")
-    canvas = np.full((200, 400, 3), (200, 120, 40), np.uint8)
-    icon = np.full((40, 40, 3), (40, 170, 240), np.uint8)
-    icon[17:23, :] = (40, 40, 220)
-    canvas[50:90, 60:100] = canvas[50:90, 300:340] = icon
-    hits = detect.find_templates(canvas, [icon], 0.85)
-    good = len(hits) == 2
-    ok &= good
-    print(f"  아이콘 감지 {'OK ' if good else 'FAIL'}: {len(hits)}/2")
-    print("셀프 테스트 통과" if ok else "셀프 테스트 실패: 위 FAIL 항목을 알려 주세요")
-    return 0 if ok else 1
+    """Validate the packaged primary detector, OCR and Tk without mouse input."""
+    import cv2
+    import tkinter as tk
+    import vision
+    import session
+    from tkinter import ttk
+    fixture = config.RESOURCE_DIR / ('qa' if config.FROZEN else 'tests/fixtures')
+    first = _imread(fixture / 'gift_cat.png')
+    second = _imread(fixture / 'chat_cat.png')
+    cats = vision.scan(first)
+    assert len(cats) == 1 and len(cats[0].gifts) == 2, '선물 검출 실패'
+    assert vision.read_name(first,cats[0])[0] == 'Alucard', '영어 이름 OCR 실패'
+    for scale in (1.25,1.5):
+        scaled = vision.scan(cv2.resize(first,None,fx=scale,fy=scale))
+        assert len(scaled)==1 and len(scaled[0].gifts)==2, f'{scale} 배율 실패'
+    cats = vision.scan(second)
+    assert len(cats)==1 and cats[0].bubble is not None and cats[0].counter, '말풍선 연결 실패'
+    text,score=vision.read_chat(second,cats[0].bubble)
+    assert session.supported(text), '한글 채팅 OCR 실패'
+    root=tk.Tk();root.withdraw();ttk.Treeview(root);root.update();root.destroy()
+    print(f'새 목록 화면 셀프 테스트 통과: 선물/이름/말풍선/125%·150%/창 표시, 채팅={text!r} ({score:.0%})')
+    print('실제 마우스 입력은 사용하지 않았습니다.')
+    return 0
 
 
 def _zone_grabber(cfg):
@@ -186,7 +175,7 @@ def cmd_test_ocr(args, cfg):
         zone = grab()
     print("감지 중... (처음엔 OCR 모델 로딩으로 몇 초 걸립니다)")
     a = debug.analyze(zone, cfg["tag"]["height"], templates, cfg["offsets"], cfg["match_threshold"],
-                      cfg["max_dist"], cfg["ambiguity_px"], cfg["targets"], tag=cfg["tag"])
+                      cfg["max_dist"], cfg["ambiguity_px"], cfg["targets"])
     targets = {debug.ocr.normalize(t) for t in cfg["targets"]}
     print(f"고양이(이름표) {len(a.cats)}마리:")
     for c in a.cats:
@@ -200,8 +189,6 @@ def cmd_test_ocr(args, cfg):
     for h in a.hits:
         side = {"left": "왼쪽", "right": "오른쪽"}.get(h.side, "?")
         who = f"{h.name} {side} (거리 {h.dist:.0f}px)" if h.name else "주인 불명 -> 보내지 않음"
-        if h.edge:
-            who += "  [감지 영역 가장자리에 너무 가까움 -> 보내지 않음: 감지 영역을 넓혀 주세요]"
         print(f"  점수 {h.hit.score:.2f}  위치 {h.hit.c}  -> {who}")
     t = a.timings
     if a.bubbles:
@@ -224,18 +211,6 @@ def cmd_test_ocr(args, cfg):
         print(f"  1회 평균 {stats['avg_ms']:.1f}ms / 최대 {stats['max_ms']:.1f}ms · CPU {stats['cpu_pct']:.1f}%")
         print(f"  인식된 고양이: {', '.join(stats['cats']) or '-'}")
     return 0
-
-
-def stop_latch(pressed):
-    """Stop check that stays True once F12 was seen, even after the key is released."""
-    seen = []
-
-    def stop():
-        if not seen and pressed():
-            seen.append(True)
-        return bool(seen)
-
-    return stop
 
 
 def _fmt_left(sec):
@@ -291,9 +266,8 @@ def cmd_run(args, cfg):
     cap = capture.Capturer()
     mon = cap.monitor(cfg["monitor"])
     db = store_mod.Store(config.BASE_DIR / "data" / "bongo.db")
-    stop = stop_latch(clicker.stop_pressed)
     eng = engine.Engine(cfg, lambda: cap.grab(cfg["monitor"], cfg["region"]), clicker.Clicker(), db,
-                        templates, monitor=mon, should_stop=stop)
+                        templates, monitor=mon, should_stop=clicker.stop_pressed)
     eng.restore_timers()
     print("OCR 모델 로딩 중...")
     debug.ocr.ensure_ready()
@@ -302,7 +276,7 @@ def cmd_run(args, cfg):
     print(f"시작: {mode} · 대상 {', '.join(cfg['targets'])} · 멈추려면 F12 (또는 Ctrl+C)")
     last_status = 0.0
     try:
-        while not stop():  # checked every cycle, even when a tick ran long
+        while not clicker.stop_pressed():  # checked every cycle, even when a tick ran long
             t0 = time.time()
             for e in eng.tick():
                 line = engine.format_event(e)
@@ -316,7 +290,7 @@ def cmd_run(args, cfg):
                 if rows:
                     print("  다음 선물: " + " · ".join(
                         f"{n} {engine.SIDE_LABEL[s]} {_fmt_left(r)}" for n, s, r in rows))
-            while time.time() - t0 < cfg["interval_sec"] and not stop():
+            while time.time() - t0 < cfg["interval_sec"] and not clicker.stop_pressed():
                 time.sleep(0.05)
         print("멈췄습니다 (F12).")
     except KeyboardInterrupt:
@@ -361,87 +335,28 @@ def cmd_chat(args, cfg):
     return 0
 
 
-MENU = [
-    ("setup", "보정 (게임 화면에서 고양이 1마리 드래그로 지정)"),
-    ("capture-test", "화면 캡처 테스트"),
-    ("test-ocr", "디버그 (저장된 보정으로 한 번 감지 + 30초 성능 측정)"),
-    ("selftest", "셀프 테스트 (OCR/감지가 이 PC에서 동작하는지)"),
-    ("targets", "선물 대상 편집"),
-    ("run", "실행: 연습 모드 (클릭 안 하고 기록만)"),
-    ("run --live", "실행: 실제 클릭 (선물 보냄)"),
-    ("chat", "채팅 기록 보기 / MD로 내보내기"),
-    ("setup --bubble", "말풍선 보정 (말풍선이 떠 있을 때: 화자 판별용)"),
-]
-
-
-def menu():
-    print("Bongo Cat 헬퍼")
-    for i, (_, label) in enumerate(MENU, start=1):
-        print(f"  {i}. {label}")
-    answer = input("번호를 입력하세요 (Enter = 종료): ").strip()
-    if not answer.isdigit() or not 1 <= int(answer) <= len(MENU):
-        return None
-    cmd = MENU[int(answer) - 1][0]
-    return [cmd, "--watch", "30"] if cmd == "test-ocr" else cmd.split()
-
-
 def main(argv=None):
-    for stream in (sys.stdout, sys.stderr):  # cp949 consoles/pipes must never crash on a character
-        if hasattr(stream, "reconfigure"):
-            stream.reconfigure(errors="replace")
-    argv = sys.argv[1:] if argv is None else argv
-    if not argv:  # double-click: control panel; the console stays hidden behind it
+    for stream in (sys.stdout,sys.stderr):
+        if hasattr(stream,'reconfigure'):
+            stream.reconfigure(encoding='utf-8',errors='replace')
+    argv=sys.argv[1:] if argv is None else argv
+    if not argv:
         import ctypes
-
         import gui
-
-        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
+        ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(),0)
         gui.main()
         return 0
-    double_clicked = argv == ["menu"]
-    if double_clicked:
-        argv = menu()
-        if argv is None:
-            return 0
-    try:
-        return _run(argv)
-    finally:
-        if double_clicked:
-            print()
-            input("끝났습니다. Enter를 누르면 창이 닫힙니다.")
-
+    return _run(argv)
 
 def _run(argv):
     capture.set_dpi_aware()
-    parser = argparse.ArgumentParser(prog="bongo")
-    sub = parser.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("capture-test", help="save a screenshot to logs/capture_test.png")
-    p.add_argument("--monitor", type=int)
-    p = sub.add_parser("setup", help="calibrate on one cat and save config")
-    p.add_argument("--monitor", type=int)
-    p.add_argument("--delay", type=int, default=3, help="seconds before capture")
-    p.add_argument("--image", help="use a saved screenshot instead of capturing")
-    p.add_argument("--bubble", action="store_true", help="only calibrate the chat bubble position")
-    sub.add_parser("selftest", help="check OCR model and detection on this PC")
-    p = sub.add_parser("test-ocr", help="detect once with saved settings, save logs/debug.png")
-    p.add_argument("--image", help="full-monitor screenshot to use instead of capturing")
-    p.add_argument("--watch", type=int, default=0, help="also run the loop for N seconds and measure")
-    p = sub.add_parser("targets", help="edit gift targets")
-    p.add_argument("--add", nargs="*")
-    p.add_argument("--remove", nargs="*")
-    p = sub.add_parser("chat", help="show chat log; export to Markdown")
-    p.add_argument("action", nargs="?", choices=["show", "export"])
-    p.add_argument("--date")
-    p.add_argument("--speaker")
-    p.add_argument("--search")
-    p = sub.add_parser("run", help="gift loop (practice mode unless --live), F12 stops")
-    p.add_argument("--live", action="store_true", help="really click")
-    args = parser.parse_args(argv)
-    cfg = config.load()
-    cmds = {"capture-test": cmd_capture_test, "setup": cmd_setup, "selftest": cmd_selftest,
-            "test-ocr": cmd_test_ocr, "targets": cmd_targets, "run": cmd_run, "chat": cmd_chat}
-    return cmds[args.cmd](args, cfg)
-
+    parser=argparse.ArgumentParser(prog='BongoHelper')
+    sub=parser.add_subparsers(dest='cmd',required=True)
+    sub.add_parser('selftest',help='검출/OCR/창 표시 검증 (클릭 없음)')
+    p=sub.add_parser('capture-test',help='선택한 모니터 캡처 저장')
+    p.add_argument('--monitor',type=int)
+    args=parser.parse_args(argv)
+    return {'selftest':cmd_selftest,'capture-test':cmd_capture_test}[args.cmd](args,config.load())
 
 if __name__ == "__main__":
     sys.exit(main())

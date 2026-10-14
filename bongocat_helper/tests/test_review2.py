@@ -82,13 +82,20 @@ def test_b3_target_removed_mid_tick_is_not_clicked(tmp_path):
 
 # B4: the CLI remembers an F12 press even after the key is released
 def test_b4_stop_latch_stays_set():
-    import bongo
+    import gui
+    import queue
 
     presses = iter([False, True, False, False])
-    stop = bongo.stop_latch(lambda: next(presses))
-    assert stop() is False
-    assert stop() is True
-    assert stop() is True and stop() is True
+    runner = gui.Runner({}, None, queue.Queue())
+    stop = runner.should_stop
+    original_pressed = gui.clicker.stop_pressed
+    gui.clicker.stop_pressed = lambda: next(presses)
+    try:
+        assert stop() is False
+        assert stop() is True
+        assert stop() is True and stop() is True
+    finally:
+        gui.clicker.stop_pressed = original_pressed
 
 
 def test_b4_stop_checked_right_before_click(tmp_path):
@@ -136,6 +143,7 @@ def test_b6_close_keeps_db_open_while_worker_alive(monkeypatch):
                                 "running": property(lambda s: True)})()
     app.db = type("D", (), {"close": lambda s: closed.append(1)})()
     app.root = type("T", (), {"destroy": lambda s: None})()
+    app.status = type("S", (), {"set": lambda self, value: None})()
     app.close()
     assert closed == []
 

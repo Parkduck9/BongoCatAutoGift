@@ -1,9 +1,11 @@
 """Regression tests for the Codex review (docs/md/codex_review_1.md) findings that were confirmed."""
 import threading
 
+import numpy as np
 import pytest
 
 import cats
+import chatlog
 import config
 import debug
 import detect
@@ -11,6 +13,7 @@ import engine
 import gift_timer
 import scene
 import store
+import ocr
 from test_cats import Sequence, settle
 from test_engine import Clock, FakeClicker, Frames, frame, kinds, make, run
 
@@ -44,7 +47,7 @@ def test_missing_tag_is_not_kept_alive_by_static_frames():
     assert reg._cats == []                                     # expired, not immortal
 
 
-def test_missing_cat_still_blocks_its_neighbors_icons():
+def test_departed_cat_is_removed_and_its_icon_is_not_owned():
     reg = cats.CatRegistry(lambda crop, box: ("리네", 0.99) if box.x == 100 else ("민지", 0.99))
     a, b = detect.Box(100, 300, 60, 26), detect.Box(200, 300, 60, 26)
     img = scene.background()
@@ -52,7 +55,8 @@ def test_missing_cat_still_blocks_its_neighbors_icons():
     reg.update([a], img, now=2, scanned=[(0, 0, 900, 420)])    # 민지's tag hidden by animation
     b_left = (b.c[0] + scene.OFF_LEFT[0], b.c[1] + scene.OFF_LEFT[1])
     owner = reg.owner_of(b_left, {"left": scene.OFF_LEFT, "right": scene.OFF_RIGHT}, 30, 10)
-    assert owner is not None and owner.cat.name == "민지" and not owner.cat.is_named
+    assert owner is None
+    assert [c.name for c in reg.cats()] == ["리네"]
 
 
 # 4: at most one real click per tick, and only if a fresh capture still shows the icon
@@ -102,7 +106,7 @@ def test_stop_request_blocks_click(tmp_path):
 # 8: success needs the same cat still in place
 def test_click_unverified_when_cat_left(tmp_path):
     img, _ = frame()
-    empty = scene.background(900, 470)
+    empty = scene.background()
     # tick1 read, tick2 confirm + fresh recheck + click, tick3 the cat is gone
     eng, clock, clicker, db, _ = make(tmp_path, [img, img, img, empty], targets=("리네",), dry_run=False)
     events = run(eng, clock, 5)
@@ -167,3 +171,166 @@ def test_count_chat(tmp_path):
 def test_unused_config_removed():
     assert "idle_interval_sec" not in config.DEFAULTS
     assert "tag_edge" not in config.DEFAULTS["templates"]
+
+
+def test_changed_owner_in_fresh_frame_never_gets_clicked(tmp_path):
+    old, _ = frame()
+    fresh, _ = scene.scene([(150, 390, "철수"), (450, 220, "철수"), (750, 320, "민지")], h=old.shape[0])
+    eng, clock, mouse, db, _ = make(tmp_path, [old], targets=("리네",), dry_run=False)
+    run(eng, clock, 1)
+    original = eng.registry.read
+    reads = []
+
+    def read(crop, box):
+        if box.c[0] < 200:
+            name = "리네" if np.array_equal(crop, cats.tag_interior(old, box)) else "철수"
+            reads.append(name)
+            return name, 0.99
+        return original(crop, box)
+
+    eng.registry.read = read
+    eng.grab = Frames(old, fresh)
+    eng.tick()
+    assert "철수" in reads
+    assert mouse.clicks == []
+
+
+def test_fresh_icon_without_visible_tag_never_gets_clicked(tmp_path):
+    old, truth = frame()
+    fresh = old.copy()
+    x, y, w, h = truth[0]["tag"]
+    fresh[y - 4:y + h + 4, x - 4:x + w + 4] = (200, 120, 40)
+    eng, clock, mouse, *_ = make(tmp_path, [old], targets=("리네",), dry_run=False)
+    run(eng, clock, 1)
+    eng.grab = Frames(old, fresh)
+    eng.tick()
+    assert mouse.clicks == []
+
+
+def test_uncertain_fresh_korean_ocr_never_gets_clicked(tmp_path):
+    old, _ = frame()
+    fresh = old.copy()
+    fresh[380, 140] = (0, 0, 0)
+    eng, clock, mouse, *_ = make(tmp_path, [old], targets=("리네",), dry_run=False)
+    run(eng, clock, 1)
+    original = eng.registry.read
+
+    def read(crop, box):
+        if box.c[0] < 200 and not np.array_equal(crop, cats.tag_interior(old, box)):
+            return "리네", 0.5
+        return original(crop, box)
+
+    eng.registry.read = read
+    eng.grab = Frames(old, fresh)
+    eng.tick()
+    assert mouse.clicks == []
+
+
+def test_runner_captures_only_selected_full_monitor(tmp_path, monkeypatch):
+    import queue
+    import gui
+    from store import Store
+    calls = []
+    class Capture:
+        def monitor(self,index):
+            assert index == 2
+            return {"left":-1920,"top":100}
+        def grab(self,index):
+            calls.append(index)
+            return None
+        def close(self): pass
+    monkeypatch.setattr(gui.capture,"Capturer",Capture)
+    monkeypatch.setattr(gui.clicker,"stop_pressed",lambda:False)
+    db=Store(tmp_path/"test.db")
+    runner=gui.Runner({"monitor":2,"dry_run":True},db,queue.Queue())
+    runner.session.scanner=lambda frame:[]
+    runner._loop("scan",None)
+    assert calls==[2]
+    db.close()
+
+
+def test_new_message_after_bubble_disappears_is_recorded():
+    zone = scene.background(300, 200)
+    box = detect.Box(20, 20, 120, 30)
+    registry = cats.CatRegistry()
+    current = ["안녕하세요"]
+    reader = chatlog.BubbleReader(read=lambda crop: [ocr.Line(current[0], 0, 0, 100, 20, 0.99)])
+    whole = [(0, 0, 300, 200)]
+    reader.update([box], zone, 0, registry, None, 30, whole)
+    assert reader.update([box], zone, 1, registry, None, 30, whole) == [("?", "안녕하세요")]
+    reader.update([], zone, 2, registry, None, 30, whole)
+    for now in (3, 4):
+        reader.update([], zone, now, registry, None, 30, [])
+    current[0] = "Hello"
+    reader.update([box], zone, 5, registry, None, 30, whole)
+    assert reader.update([box], zone, 6, registry, None, 30, []) == [("?", "Hello")]
+
+
+def test_changed_text_in_same_bubble_is_saved_but_same_sentence_is_deduped():
+    zone = scene.background(300, 200)
+    box = detect.Box(20, 20, 120, 30)
+    registry = cats.CatRegistry()
+    current = ["안녕하세요"]
+    reader = chatlog.BubbleReader(read=lambda crop: [ocr.Line(current[0], 0, 0, 100, 20, 0.99)])
+    dedup = chatlog.ChatDedup()
+    saved = []
+
+    def tick(now):
+        for who, text in reader.update([box], zone, now, registry, None, 30, [(0, 0, 300, 200)]):
+            if dedup.observe(who, text, now):
+                saved.append(text)
+
+    tick(0)
+    tick(1)
+    # Tiny visual change, same OCR sentence: re-read but don't store a duplicate.
+    zone[30, 30] = (1, 2, 3)
+    tick(2)
+    tick(3)
+    current[0] = "Hello"
+    zone[30, 30] = (4, 5, 6)
+    tick(4)
+    tick(5)
+    tick(6)
+    assert saved == ["안녕하세요", "Hello"]
+
+
+def test_chat_position_is_blocked_for_four_seconds_even_after_disappearance():
+    zone = scene.background(300, 200)
+    box = detect.Box(20, 20, 120, 30)
+    reg = cats.CatRegistry()
+    text = ["첫 문장"]
+    reads = []
+
+    def read(crop):
+        reads.append(text[0])
+        return [ocr.Line(text[0], 0, 0, 100, 20, 0.99)]
+
+    br = chatlog.BubbleReader(read=read, settle_sec=0)
+    whole = [(0, 0, 300, 200)]
+    assert br.update([box], zone, 0, reg, None, 30, whole) == [("?", "첫 문장")]
+    br.update([], zone, 1, reg, None, 30, whole)
+    text[0] = "다른 문장"
+    for now in (2, 3, 3.99):
+        assert br.update([box], zone, now, reg, None, 30, whole) == []
+    assert reads == ["첫 문장"]
+    assert br.update([box], zone, 4, reg, None, 30, whole) == [("?", "다른 문장")]
+
+
+def test_pixel_changes_do_not_delay_first_chat_or_duplicate_same_sentence():
+    zone = scene.background(300, 200)
+    box = detect.Box(20, 20, 120, 30)
+    reg, dedup = cats.CatRegistry(), chatlog.ChatDedup()
+    reads, saved = [], []
+
+    def read(crop):
+        reads.append(True)
+        return [ocr.Line("안녕하세요", 0, 0, 100, 20, 0.99)]
+
+    br = chatlog.BubbleReader(read=read)
+    for now in range(14):
+        zone[30, 30] = (now, now, now)
+        for speaker, text in br.update([box], zone, now, reg, None, 30, [(0, 0, 300, 200)]):
+            if dedup.observe(speaker, text, now):
+                saved.append(text)
+    assert len(reads) == 4  # times 1, 5, 9, 13, regardless of tiny pixel changes
+    assert saved == ["안녕하세요"]

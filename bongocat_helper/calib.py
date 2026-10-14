@@ -5,6 +5,7 @@ Coordinates: `rects` are in frame coords (frame = whole monitor). Offsets are re
 the name-tag center, so they hold for every cat at any height.
 """
 from dataclasses import dataclass, field
+import sys
 
 import cv2
 import numpy as np
@@ -13,7 +14,7 @@ import cats as cats_mod
 import detect
 
 STEPS = [  # key, required, Korean instruction
-    ("zone", True, "1/6 감지 영역: 고양이가 나타날 수 있는 범위 전체 + 고양이 좌우 약 100px, 위아래 약 50px 여유"),
+    ("zone", True, "1/6 감지 영역: 고양이가 나타날 수 있는 범위 전체 (가장 높은 말풍선 ~ 작업표시줄 위)"),
     ("left", True, "2/6 한 고양이의 왼쪽 1000 선물 아이콘 (그림만, 딱 맞게)"),
     ("right", True, "3/6 같은 고양이의 오른쪽 1000 선물 아이콘"),
     ("tag", True, "4/6 같은 고양이의 이름표 (흰 박스 전체)"),
@@ -186,7 +187,9 @@ def select_rects(frame, max_w=1600, max_h=900, steps=STEPS, view_rect=None):
         canvas = _banner(np.vstack([np.zeros((64, shown.shape[1], 3), np.uint8), shown]), text)
         while True:
             print(text)
+            print(f"보정 단계 시작: {key}", file=sys.stderr, flush=True)
             r = cv2.selectROI(win, canvas, showCrosshair=True, fromCenter=False)
+            print(f"보정 선택 결과: {key} {r}", file=sys.stderr, flush=True)
             if r[2] > 0 and r[3] > 0 and r[1] >= 64:
                 rects[key] = [round(r[0] / scale) + origin[0], round((r[1] - 64) / scale) + origin[1],
                               round(r[2] / scale), round(r[3] / scale)]

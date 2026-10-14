@@ -1,0 +1,98 @@
+{
+  "animation_delays_ocr": {
+    "frames": 10,
+    "ocr_calls": 3,
+    "saved": [
+      [
+        "?",
+        "hello"
+      ],
+      [
+        "?",
+        "hello"
+      ],
+      [
+        "?",
+        "hello"
+      ]
+    ],
+    "issue_reproduced": false
+  },
+  "same_visible_sentence_duplicated": {
+    "saved": [
+      [
+        1,
+        "?",
+        "hello"
+      ]
+    ],
+    "issue_reproduced": false
+  },
+  "setup_lost_after_target_edit": {
+    "before_monitor": 2,
+    "after_monitor": 2,
+    "after_region": [
+      100,
+      100,
+      600,
+      400
+    ],
+    "after_tag_height": 26,
+    "issue_reproduced": false
+  },
+  "real_korean_ocr": [
+    {
+      "expected": "안녕하세요",
+      "actual": "안녕하세요",
+      "font_missing_chars": [],
+      "exact_match": true
+    },
+    {
+      "expected": "선물 고마워요",
+      "actual": "선물 고마워요",
+      "font_missing_chars": [],
+      "exact_match": true
+    },
+    {
+      "expected": "야옹 야옹",
+      "actual": "야옹 야옹",
+      "font_missing_chars": [],
+      "exact_match": true
+    }
+  ],
+  "three_failed_ocr_reads_then_ignore": {
+    "first_failed_reads": 3,
+    "total_ocr_calls": 3,
+    "failure_logs": [
+      [
+        "?",
+        1,
+        3
+      ],
+      [
+        "?",
+        2,
+        3
+      ],
+      [
+        "?",
+        3,
+        3
+      ]
+    ],
+    "new_sentence_saved": [],
+    "expected_rule": "log each failure; ignore this bubble after three failures",
+    "issue_reproduced": false
+  },
+  "resized_bubble_bypasses_4sec_block": {
+    "first_at_second_1": [
+      [
+        "?",
+        "첫 문장"
+      ]
+    ],
+    "second_at_second_3": [],
+    "same_right_edge": true,
+    "issue_reproduced": false
+  }
+}

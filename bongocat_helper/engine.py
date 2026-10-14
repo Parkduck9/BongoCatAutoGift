@@ -43,7 +43,7 @@ def owner_may_be_cut_off(point, offsets, tag, max_dist, W, H):
 
 def format_event(e):
     t = time.strftime("%H:%M:%S", time.localtime(e.ts))
-    if e.result == "chat":
+    if e.result in ("chat", "chat_ocr_failed"):
         return f"{t} | 채팅 | {e.name}: {e.text}"
     return f"{t} | {SIDE_LABEL.get(e.side, '?1000')} | {e.score:.2f} | {e.name or '-'} | {e.result}"
 
@@ -62,7 +62,8 @@ class Engine:
         self.registry = cats_mod.CatRegistry(read, ttl=cfg["cat_ttl_sec"])
         self.change = detect.ChangeDetector()
         self.timers = gift_timer.GiftTimers(cfg["gift_cooldown_sec"])
-        self.bubbles = chatlog.BubbleReader()
+        self._chat_failures = []
+        self.bubbles = chatlog.BubbleReader(on_failure=self._record_chat_failure)
         self.dedup = chatlog.ChatDedup(cfg["chat_gap_sec"])
         self._verify = []          # [(key, hit, due, cat_id, tag_center)]
         self._recent_clicks = []   # [((x, y), t)]
@@ -78,6 +79,12 @@ class Engine:
         return {ocr.normalize(t) for t in self.cfg["targets"]}
 
     # ------------------------------------------------------------------ helpers
+    def _record_chat_failure(self, name, attempt, total):
+        now = self.clock()
+        text = f"OCR 실패 ({attempt}/{total})"
+        self.store.add_chat(now, name, text)
+        self._chat_failures.append(Event(now, "chat_ocr_failed", name, text=text))
+
     def restore_timers(self):
         now = self.clock()
         results = ("clicked_ok", "dry_run") if self.cfg["dry_run"] else ("clicked_ok",)
@@ -128,6 +135,10 @@ class Engine:
         if not found:
             return False
         target = min(found, key=lambda f: abs(f.c[0] - hit.c[0]) + abs(f.c[1] - hit.c[1]))
+        self.registry.update(detect.find_tag_boxes(fresh,self.cfg['tag']['height']),fresh,now)
+        fresh_owner=self.registry.owner_of(target.c,self.offsets,self.cfg['max_dist'],self.cfg['ambiguity_px'])
+        if fresh_owner is None or fresh_owner.cat.id!=owner.cat.id or not fresh_owner.cat.is_named:
+            return False
         # identity on the same frame that is clicked, target list read live, stop checked last
         if not self.registry.reverify(owner.cat, fresh, now) or owner.cat.name not in self.targets \
                 or self.should_stop():
@@ -167,6 +178,9 @@ class Engine:
             if self.dedup.observe(speaker, text, now):
                 self.store.add_chat(now, speaker, text)
                 events.append(Event(now, "chat", speaker, text=text))
+
+        events.extend(self._chat_failures)
+        self._chat_failures.clear()
 
         # clicks waiting for confirmation
         still = []

@@ -1,0 +1,45 @@
+flowchart TB
+    APP["gui.py · 메인 창"]
+
+    subgraph SETUP["보정 경로"]
+        CHILD["bongo.py → calib.py<br/>별도 프로세스 · 영역 선택 · 저장 팝업"]
+        CFG[("config.json · templates<br/>모니터 · 영역 · 대상 · 아이콘")]
+        CHILD --> CFG
+    end
+
+    subgraph RUN["실행 경로"]
+        WORKER["gui.Runner · 작업 스레드"]
+        CAP["capture.py<br/>지정 모니터 캡처"]
+        ENGINE["engine.py · 전체 판단 순서"]
+        DETECT["detect.py<br/>이름표 · 선물 · 말풍선 위치"]
+        CATS["cats.py<br/>한글 이름 확인 · 위치 캐시 갱신"]
+        GIFT["선물 판단<br/>대상 일치 · 새 캡처에서 재확인"]
+        CLICK["clicker.py · 실제 클릭"]
+        TIMER["gift_timer.py<br/>전송 확인 후 30분 대기"]
+        CHAT["chatlog.py<br/>화자 위치별 4초 차단<br/>OCR 실패 로그 · 3회 실패 후 무시"]
+        OCR["ocr.py · 한글 OCR"]
+        DB[("store.py · SQLite<br/>채팅 · 실패 · 선물 기록")]
+        EVENTS["이벤트 큐<br/>메인 창 로그 갱신"]
+
+        WORKER --> CAP --> ENGINE
+        ENGINE --> DETECT --> CATS
+        CATS --> OCR
+        ENGINE --> GIFT
+        CATS --> GIFT
+        GIFT --> CLICK --> TIMER
+        TIMER --> GIFT
+        ENGINE --> CHAT
+        CATS --> CHAT
+        CHAT --> OCR
+        CHAT --> DB
+        ENGINE -->|선물 결과| DB
+        ENGINE --> EVENTS
+    end
+
+    APP -->|보정 버튼| CHILD
+    CHILD -.->|종료 상태를 메인 창에서 감시| APP
+    APP -->|시작 버튼| WORKER
+    CFG -->|시작 시 설정 읽기| WORKER
+    APP -->|대상 목록만 수정| CFG
+    DB -->|채팅 조회·통계| APP
+    EVENTS --> APP

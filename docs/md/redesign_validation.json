@@ -1,0 +1,80 @@
+{
+  "scope": "design prototype; production exe unchanged; no real clicks",
+  "passed_count": 26,
+  "passed": [
+    "duplicate_names_get_distinct_ids",
+    "unchanged_positions_do_not_repeat_name_ocr",
+    "gift_defaults_to_unchecked",
+    "unchecked_cat_receives_no_gift",
+    "checked_cat_receives_only_its_gift",
+    "fresh_wrong_name_blocks_gift",
+    "fresh_wrong_position_blocks_touch",
+    "touch_button_plans_one_body_click",
+    "room_exit_clears_positions",
+    "unreadable_cat_is_retained_and_editable",
+    "unique_moved_cat_keeps_manual_permission",
+    "ambiguous_movement_does_not_inherit_gift_permission",
+    "low_confidence_candidate_is_marked_estimated",
+    "three_second_block",
+    "new_bubble_can_be_read_at_three_seconds",
+    "korean_and_english_supported",
+    "other_decoded_scripts_skipped",
+    "empty_candidate_logs_failure_once",
+    "reference_1_name_region",
+    "reference_1_english_name",
+    "reference_1_two_gift_positions",
+    "reference_2_bubble_on_white_background",
+    "reference_2_retains_unnamed_cat_anchor",
+    "reference_2_number_is_not_a_player_name",
+    "reference_2_one_ocr_call_and_one_log",
+    "reference_2_preserves_best_candidate"
+  ],
+  "reference_images": {
+    "first_image": {
+      "name": "Alucard",
+      "score": 0.99888,
+      "name_box": {
+        "x": 58,
+        "y": 114,
+        "w": 104,
+        "h": 24
+      },
+      "gift_centers": [
+        [
+          55,
+          93
+        ],
+        [
+          166,
+          94
+        ]
+      ]
+    },
+    "second_image": {
+      "bubble_box": [
+        44,
+        60,
+        107,
+        28
+      ],
+      "saved_text": "야용 야용",
+      "status": "estimated",
+      "score": 0.62146,
+      "ocr_calls": 1,
+      "name_present": false,
+      "counter_box": [
+        113,
+        145,
+        72,
+        20
+      ],
+      "counter_text": "166 082",
+      "cat_records": 1
+    },
+    "limits": [
+      "Reference matching does not establish all-monitor detection accuracy.",
+      "A best OCR hypothesis is not proof of the intended text.",
+      "Decoded-script filtering cannot reject foreign text misread as Latin/Hangul."
+    ]
+  }
+}

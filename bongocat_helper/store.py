@@ -31,6 +31,11 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._lock = threading.Lock()
         self._db.executescript(SCHEMA)
+        columns = {row[1] for row in self._db.execute('PRAGMA table_info(chat)')}
+        for name, declaration in [('cat_id', 'INTEGER'), ('status', "TEXT NOT NULL DEFAULT 'recognized'"), ('score', 'REAL')]:
+            if name not in columns:
+                self._db.execute(f'ALTER TABLE chat ADD COLUMN {name} {declaration}')
+        self._db.commit()
 
     def add_gift(self, ts, name, side, result):
         with self._lock, self._db:
@@ -48,11 +53,16 @@ class Store:
             return self._db.execute(
                 f"SELECT COUNT(*) FROM gift WHERE ts >= ? AND result IN ({marks})", (since, *results)).fetchone()[0]
 
-    def add_chat(self, ts, speaker, text):
+    def add_chat(self, ts, speaker, text, *, cat_id=None, status='recognized', score=None):
         date = datetime.date.fromtimestamp(ts).isoformat()
         with self._lock, self._db:
-            self._db.execute("INSERT INTO chat(ts, date, speaker, text) VALUES (?, ?, ?, ?)",
-                             (ts, date, speaker, text))
+            self._db.execute("INSERT INTO chat(ts, date, speaker, text, cat_id, status, score) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                             (ts, date, speaker, text, cat_id, status, score))
+
+    def query_chat_records(self):
+        with self._lock:
+            rows = self._db.execute('SELECT ts,speaker,text,cat_id,status,score FROM chat ORDER BY ts,id').fetchall()
+            return [dict(zip(('ts','speaker','text','cat_id','status','score'), row)) for row in rows]
 
     def query_chat(self, date=None, speaker=None, keyword=None):
         """[(ts, speaker, text)] oldest first, filtered by any of date / speaker / keyword."""

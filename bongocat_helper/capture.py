@@ -17,6 +17,7 @@ class Capturer:
     """mss handles are thread-bound: create one per thread."""
 
     def __init__(self):
+        # Windows MSS captures the desktop without compositing the mouse pointer.
         self._sct = mss.MSS()
 
     def monitors(self):
